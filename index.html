@@ -1,0 +1,1138 @@
+<!doctype html>
+<html lang="de">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>[hidden]{display:none!important}</style>
+<meta charset="utf-8">
+<title>4D Sound Explorer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+  :root {
+    color-scheme: dark;
+    --ground: #03040a;
+    --ink: #eef1f8;
+    --dim: #97a0b6;
+    --faint: rgba(200, 214, 255, 0.14);
+    --glass: rgba(9, 12, 24, 0.52);
+    --a1: #2659ff;
+    --a2: #4df2ff;
+    --a3: #ff4dd9;
+    --b: #ffab5e;
+    --serif: "Instrument Serif", "Iowan Old Style", Georgia, serif;
+    --sans: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  }
+  html, body { height: 100%; }
+  body {
+    margin: 0; overflow: hidden;
+    background: var(--ground); color: var(--ink);
+    font: 14px/1.45 var(--sans);
+    -webkit-font-smoothing: antialiased;
+  }
+  #gl {
+    position: fixed; inset: 0; width: 100vw; height: 100vh; height: 100dvh;
+    display: block; touch-action: none; cursor: grab;
+  }
+  #gl, #gl:active { cursor: none; }
+  #fx { position: fixed; inset: 0; width: 100vw; height: 100vh; pointer-events: none; }
+
+  .hud {
+    position: fixed; inset: 0; pointer-events: none;
+    padding: calc(env(safe-area-inset-top, 0px) + 22px) 28px calc(env(safe-area-inset-bottom, 0px) + 18px);
+    display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: auto 1fr auto;
+    gap: 16px; transition: opacity .6s ease;
+  }
+  body.bare .hud { opacity: 0; }
+  body.bare .hud * { pointer-events: none !important; }
+
+  .ident { grid-column: 1; grid-row: 1; max-width: 36rem; }
+  .eyebrow {
+    font: 500 11px/1.2 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--dim);
+    display: flex; gap: 10px; flex-wrap: wrap;
+  }
+  .eyebrow .sym { color: var(--a2); letter-spacing: .06em; }
+  h1 {
+    font: 400 clamp(46px, 7.2vw, 104px)/.92 var(--serif);
+    margin: .22em 0 .18em; letter-spacing: -.015em; text-wrap: balance;
+  }
+  h1.in { animation: nameIn .9s cubic-bezier(.2,.7,.2,1) both; }
+  @keyframes nameIn {
+    from { opacity: 0; filter: blur(14px); transform: translateY(8px); letter-spacing: .04em; }
+    to { opacity: 1; filter: blur(0); transform: none; }
+  }
+  .blurb { color: var(--dim); max-width: 31rem; margin: 0 0 16px; font-size: 15px; line-height: 1.5; }
+  .stats { display: flex; gap: 24px; margin: 0; flex-wrap: wrap; }
+  .stats div { display: flex; flex-direction: column-reverse; gap: 3px; }
+  .stats dt { font: 500 10px/1 var(--mono); letter-spacing: .13em; text-transform: uppercase; color: var(--dim); }
+  .stats dd { margin: 0; font: 400 24px/1 var(--mono); font-variant-numeric: tabular-nums; }
+  .partner { margin-top: 16px; display: flex; align-items: center; gap: 10px; color: var(--dim); font-size: 13px; transition: opacity .4s; }
+  .partner i { width: 20px; height: 2px; border-radius: 1px; background: var(--b); box-shadow: 0 0 10px var(--b); }
+  .partner b { color: var(--ink); font-weight: 500; }
+  .partner.off { opacity: .35; }
+
+  .meter {
+    grid-column: 2; grid-row: 1; text-align: right;
+    font: 12px/1.75 var(--mono); color: var(--dim); font-variant-numeric: tabular-nums;
+  }
+  .meter b { color: var(--ink); font-weight: 500; }
+  .legend { display: inline-flex; align-items: center; gap: 8px; margin-top: 6px; }
+  .legend span.bar { width: 96px; height: 6px; border-radius: 3px; background: linear-gradient(90deg, var(--a1), var(--a2), var(--a3)); }
+  .legend span.bar.b { background: linear-gradient(90deg, #ff5214, #ffd173); }
+  .meter .note { max-width: 17rem; margin-left: auto; font-family: var(--sans); font-size: 12px; line-height: 1.45; margin-top: 10px; }
+  .meter kbd { font: 11px var(--mono); color: var(--ink); border: 1px solid var(--faint); border-radius: 4px; padding: 0 4px; }
+
+  .dock { grid-column: 1 / -1; grid-row: 3; display: flex; flex-direction: column; gap: 10px; align-self: end; min-width: 0; }
+  .shapes { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding: 2px; margin: -2px; }
+  .shapes::-webkit-scrollbar { display: none; }
+  .row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; justify-content: space-between; }
+  .toggles { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+
+  button, .speed {
+    pointer-events: auto; flex: none;
+    background: var(--glass); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+    border: 1px solid var(--faint); color: var(--ink);
+    font: 500 13px/1 var(--sans); padding: 9px 13px; border-radius: 999px; cursor: pointer;
+    display: inline-flex; gap: 8px; align-items: center;
+    transition: border-color .2s, box-shadow .2s, background .2s;
+  }
+  button:hover { border-color: rgba(200, 214, 255, 0.34); }
+  button:focus-visible, input:focus-visible { outline: 2px solid var(--a2); outline-offset: 2px; }
+  .chip { position: relative; overflow: hidden; }
+  .chip kbd { font: 11px/1 var(--mono); color: var(--dim); }
+  .chip::after {
+    content: ""; position: absolute; left: 0; bottom: 0; height: 2px;
+    width: calc(var(--p, 0) * 100%); background: var(--a2); opacity: .8;
+  }
+  .chip[aria-current="true"] { border-color: var(--a2); box-shadow: 0 0 22px -6px var(--a2); background: rgba(40, 90, 140, 0.28); }
+  .tog { border-radius: 8px; color: var(--dim); }
+  .tog::before { content: ""; width: 7px; height: 7px; border-radius: 50%; border: 1px solid currentColor; }
+  .tog[aria-pressed="true"] { color: var(--ink); border-color: rgba(77, 242, 255, 0.5); }
+  .tog[aria-pressed="true"]::before { background: var(--a2); border-color: var(--a2); box-shadow: 0 0 8px var(--a2); }
+  .sound[aria-pressed="false"] { color: var(--ink); border-color: rgba(255, 171, 94, 0.6); animation: invite 2.4s ease-in-out infinite; }
+  @keyframes invite { 50% { box-shadow: 0 0 22px -4px var(--b); } }
+  .seg { display: inline-flex; pointer-events: auto; }
+  .seg button { border-radius: 0; color: var(--dim); }
+  .seg button:first-child { border-radius: 8px 0 0 8px; }
+  .seg button:last-child { border-radius: 0 8px 8px 0; margin-left: -1px; }
+  .seg button[aria-pressed="true"] { color: var(--ink); background: rgba(40, 90, 140, 0.34); border-color: rgba(77, 242, 255, 0.5); position: relative; }
+  .speed { border-radius: 8px; color: var(--dim); cursor: default; padding-block: 6px; }
+  .speed input { width: 96px; accent-color: var(--a2); }
+  .credit { font: 11px/1.4 var(--mono); color: var(--dim); letter-spacing: .04em; text-align: right; }
+  .credit b { color: var(--ink); font-weight: 500; }
+
+  body:not(.cockpit) .hud { display: none; }
+  .mini {
+    position: fixed; right: 16px; bottom: calc(env(safe-area-inset-bottom, 0px) + 12px); z-index: 5;
+    display: flex; align-items: center; gap: .9em; font: 500 max(11px, 2vh)/1 var(--mono); letter-spacing: .08em;
+  }
+  body.cockpit .hud { padding-bottom: calc(env(safe-area-inset-bottom, 0px) + max(11px, 2vh) + 30px); }
+  .mini button {
+    background: none; border: 0; padding: .3em .2em; font: inherit; letter-spacing: inherit; color: var(--dim);
+    opacity: .55; -webkit-backdrop-filter: none; backdrop-filter: none; border-radius: 4px; transition: opacity .2s, color .2s;
+  }
+  .mini button[aria-pressed="true"] { opacity: 1; color: var(--a2); text-shadow: 0 0 12px rgba(77, 242, 255, .6); }
+  .mini button:hover, .mini button:focus-visible { opacity: 1; color: var(--ink); }
+  .mini .skip { font-size: 1.2em; font-weight: 500; letter-spacing: -.12em; padding-inline: .45em; opacity: .85; color: var(--ink); }
+  .invite {
+    position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 4; pointer-events: none;
+    width: min(34rem, calc(100vw - 32px)); text-align: center;
+    font: 400 clamp(22px, 3.2vw, 38px)/1.25 var(--serif); color: var(--ink); text-wrap: balance;
+    text-shadow: 0 0 24px rgba(3, 4, 10, .9), 0 0 60px rgba(77, 242, 255, .25);
+    transition: opacity 1.2s ease;
+  }
+  .invite small { display: block; margin-top: .8em; font: 500 11px/1 var(--mono); letter-spacing: .2em; text-transform: uppercase; color: var(--dim); }
+  .invite.gone { opacity: 0; }
+  #nogl[hidden] { display: none; }
+  #nogl { position: fixed; inset: 0; display: grid; place-items: center; padding: 24px; text-align: center; color: var(--dim); }
+
+  @media (max-width: 760px) {
+    .hud { padding-inline: 16px; padding-top: calc(env(safe-area-inset-top, 0px) + 16px); }
+    .meter .note, .meter .legend-b { display: none; }
+    .blurb { font-size: 13px; }
+    .stats { gap: 16px; }
+    .stats dd { font-size: 18px; }
+    .credit { display: none; }
+  }
+  @media (max-width: 520px) {
+    .meter { display: none; }
+    .blurb { display: none; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    h1.in { animation: none; }
+  }
+</style>
+
+<canvas id="gl" aria-label="Echtzeit-Animation vierdimensionaler Körper"></canvas>
+<canvas id="fx" aria-hidden="true"></canvas>
+<div id="nogl" hidden>Dieser Browser unterstützt kein WebGL2. Mit einem aktuellen Chrome, Safari oder Firefox läuft die Animation.</div>
+
+<div class="invite" id="invite">Please switch the sound on. Move the cursor and click around.<small>4D Sound Explorer</small></div>
+<div class="mini">
+  <button id="autoplay" aria-pressed="false">auto play off</button>
+  <button id="cockpit" aria-pressed="false" title="Taste C">cockpit off</button>
+  <button class="skip" id="prev" aria-label="Voriger Körper">&lt;&lt;&lt;</button>
+  <button class="skip" id="next" aria-label="Nächster Körper">&gt;&gt;&gt;</button>
+</div>
+<div class="hud" id="hud">
+  <header class="ident">
+    <div class="eyebrow"><span id="kind">Regulärer 4D-Körper</span><span class="sym" id="sym">{4,3,3}</span></div>
+    <h1 id="name">Tesserakt</h1>
+    <p class="blurb" id="blurb"></p>
+    <dl class="stats" id="stats"></dl>
+    <div class="partner" id="partner"><i></i><span>durchdrungen von <b id="pname">16-Zeller</b></span></div>
+  </header>
+
+  <aside class="meter" aria-live="off">
+    <div><b id="pc">0</b> Partikel</div>
+    <div><b id="fps">60</b> fps · 4D → 3D → 2D</div>
+    <div class="legend">w −1 <span class="bar"></span> +1</div>
+    <div class="legend legend-b">w −1 <span class="bar b"></span> +1</div>
+    <p class="note">Die Farbe zeigt die vierte Koordinate. Ziehen dreht in 3D, <kbd>Shift</kbd> + Ziehen dreht durch die vierte Dimension (auf dem Handy: zwei Finger). Tasten <kbd>1</kbd>–<kbd>8</kbd>, Alles klingt in A-Dur-Pentatonik. Klick spielt eine Hang-Figur (Höhe = Tonhöhe, Seite = Rhythmus), Bewegen streicht einzelne Töne, und du siehst jeden Ton aus deinem Kreis steigen. <kbd>M</kbd> für Klang (mit Kopfhörern: binauraler Theta-Schlag), <kbd>H</kbd> blendet alles aus.</p>
+  </aside>
+
+  <nav class="dock" aria-label="Steuerung">
+    <div class="shapes" id="shapes"></div>
+    <div class="row">
+      <div class="toggles">
+        <button class="tog sound" id="tSound" aria-pressed="false" title="Taste M">Klang</button>
+        <div class="seg" role="group" aria-label="Projektion">
+          <button id="pStereo" aria-pressed="true" title="Taste P">Stereografisch</button>
+          <button id="pCentral" aria-pressed="false" title="Taste P">Zentral</button>
+        </div>
+        <button class="tog" id="tDual" aria-pressed="true" title="Taste D">Zweiter Körper</button>
+        <button class="tog" id="tSlice" aria-pressed="false" title="Taste S">3D-Schnitt</button>
+        <button class="tog" id="tTrail" aria-pressed="true" title="Taste T">Nachleuchten</button>
+        <button class="tog" id="tAuto" aria-pressed="true" title="Taste A">Automatik</button>
+        <label class="speed" for="speed">Tempo <input type="range" id="speed" min="0" max="3" step="0.01" value="1"></label>
+      </div>
+      <div class="credit">Gebaut von <b>Claude Opus 5.5</b> aus einem Satz · WebGL2, ohne Framework</div>
+    </div>
+  </nav>
+</div>
+
+<script>
+(() => {
+  "use strict";
+  const canvas = document.getElementById("gl");
+  const fail = msg => { const n = document.getElementById("nogl"); n.innerHTML = msg; n.hidden = false; document.getElementById("hud").hidden = true; };
+  const gl = canvas.getContext("webgl2", { antialias: false, alpha: false, depth: false, powerPreference: "high-performance" })
+          || canvas.getContext("webgl2");
+  if (!gl) {
+    const probe = document.createElement("canvas");
+    const any = probe.getContext("webgl") || probe.getContext("experimental-webgl");
+    fail(any
+      ? "Dein Browser stellt nur WebGL 1 bereit, diese Animation braucht WebGL2.<br>Bitte Browser aktualisieren oder in Chrome unter <b>chrome://flags</b> WebGL2 nicht deaktivieren."
+      : "Die Grafikbeschleunigung ist in diesem Browser ausgeschaltet oder blockiert.<br>In Chrome: <b>Einstellungen → System → „Grafikbeschleunigung verwenden, falls verfügbar“</b> einschalten und Chrome neu starten.<br><small>Prüfen lässt es sich unter chrome://gpu (Zeile „WebGL2“).</small>");
+    return;
+  }
+  canvas.addEventListener("webglcontextlost", e => { e.preventDefault(); fail("Die Grafikkarte hat die Animation beendet. Bitte Seite neu laden."); });
+  const hasFloat = !!gl.getExtension("EXT_color_buffer_float");
+  const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const small = Math.min(innerWidth, innerHeight) < 700 || matchMedia("(pointer: coarse)").matches;
+  const N = small ? 70000 : 160000;       // particles per body
+  const TOTAL = N * 2;
+
+  /* ================= 4D geometry ================= */
+  const PHI = (1 + Math.sqrt(5)) / 2;
+  const norm = v => { const l = Math.hypot(...v); return v.map(x => x / l); };
+  const d2 = (a, b) => { let s = 0; for (let i = 0; i < 4; i++) { const d = a[i] - b[i]; s += d * d; } return s; };
+  function signsOf(v) {
+    let out = [[]];
+    for (const x of v) {
+      const n = [];
+      for (const o of out) { if (x === 0) n.push([...o, 0]); else { n.push([...o, x]); n.push([...o, -x]); } }
+      out = n;
+    }
+    return out;
+  }
+  function permutations(n) {
+    const res = [], a = [...Array(n).keys()];
+    const rec = k => {
+      if (k === n) { res.push(a.slice()); return; }
+      for (let i = k; i < n; i++) { [a[k], a[i]] = [a[i], a[k]]; rec(k + 1); [a[k], a[i]] = [a[i], a[k]]; }
+    };
+    rec(0); return res;
+  }
+  const parity = p => { let s = 0; for (let i = 0; i < p.length; i++) for (let j = i + 1; j < p.length; j++) if (p[i] > p[j]) s++; return s % 2; };
+  function uniq(pts) {
+    const m = new Map();
+    for (const p of pts) { const k = p.map(x => Math.round(x * 1e5) + 0).join(","); if (!m.has(k)) m.set(k, p); }
+    return [...m.values()];
+  }
+  const allPerms = v => uniq(permutations(4).map(p => p.map(i => v[i])));
+  function edgesByMin(V) {
+    let m = Infinity;
+    for (let i = 0; i < V.length; i++) for (let j = i + 1; j < V.length; j++) { const d = d2(V[i], V[j]); if (d < m) m = d; }
+    const t = m * 1.0005 + 1e-9, E = [];
+    for (let i = 0; i < V.length; i++) for (let j = i + 1; j < V.length; j++) if (d2(V[i], V[j]) < t) E.push([i, j]);
+    return E;
+  }
+  function poly(V, E) {
+    V = V.map(norm);
+    E = E || edgesByMin(V);
+    return { V, E, segs: E.map(([i, j]) => [V[i], V[j]]) };
+  }
+  const memo = f => { let c; return () => c || (c = f()); };
+
+  const G = {};
+  G.tess = memo(() => poly(signsOf([.5, .5, .5, .5])));
+  G.cross = memo(() => poly(uniq(allPerms([1, 0, 0, 0]).flatMap(signsOf))));
+  const simplex = neg => { const s = 1 / Math.sqrt(5); let V = [[1, 1, 1, -s], [1, -1, -1, -s], [-1, 1, -1, -s], [-1, -1, 1, -s], [0, 0, 0, 4 * s]]; if (neg) V = V.map(v => v.map(x => -x)); return poly(V); };
+  G.simplex = memo(() => simplex(false));
+  G.simplexD = memo(() => simplex(true));
+  G.c24 = memo(() => poly(uniq(allPerms([1, 1, 0, 0]).flatMap(signsOf))));
+  G.c24d = memo(() => poly(uniq([...allPerms([1, 0, 0, 0]).flatMap(signsOf), ...signsOf([.5, .5, .5, .5])])));
+  G.c600 = memo(() => {
+    const V = [...allPerms([1, 0, 0, 0]).flatMap(signsOf), ...signsOf([.5, .5, .5, .5])];
+    const base = [PHI / 2, .5, 1 / (2 * PHI), 0];
+    for (const p of permutations(4)) if (parity(p) === 0) { const v = [0, 0, 0, 0]; for (let i = 0; i < 4; i++) v[p[i]] = base[i]; V.push(...signsOf(v)); }
+    return poly(uniq(V));
+  });
+  G.c120 = memo(() => {
+    // The 120-cell is the dual of the 600-cell: its 600 vertices are the centres of the 600 tetrahedra.
+    const P = G.c600(), V = P.V, n = V.length;
+    const adj = Array.from({ length: n }, () => new Set());
+    for (const [i, j] of P.E) { adj[i].add(j); adj[j].add(i); }
+    const C = [];
+    for (let i = 0; i < n; i++) for (const j of adj[i]) if (j > i)
+      for (const k of adj[j]) if (k > j && adj[i].has(k))
+        for (const l of adj[k]) if (l > k && adj[i].has(l) && adj[j].has(l))
+          C.push([0, 1, 2, 3].map(c => V[i][c] + V[j][c] + V[k][c] + V[l][c]));
+    return poly(C);
+  });
+  G.duo = memo(() => {
+    const p = 12, V = [], E = [], id = (i, j) => ((i + p) % p) * p + ((j + p) % p);
+    for (let i = 0; i < p; i++) for (let j = 0; j < p; j++) { const a = 2 * Math.PI * i / p, b = 2 * Math.PI * j / p; V.push([Math.cos(a), Math.sin(a), Math.cos(b), Math.sin(b)]); }
+    for (let i = 0; i < p; i++) for (let j = 0; j < p; j++) { E.push([id(i, j), id(i + 1, j)]); E.push([id(i, j), id(i, j + 1)]); }
+    return poly(V, E);
+  });
+  G.duopyr = memo(() => {
+    const p = 12, V = [], E = [];
+    for (let i = 0; i < p; i++) { const a = 2 * Math.PI * (i + .5) / p; V.push([Math.cos(a), Math.sin(a), 0, 0]); }
+    for (let j = 0; j < p; j++) { const b = 2 * Math.PI * (j + .5) / p; V.push([0, 0, Math.cos(b), Math.sin(b)]); }
+    for (let i = 0; i < p; i++) { E.push([i, (i + 1) % p]); E.push([p + i, p + (i + 1) % p]); }
+    for (let i = 0; i < p; i++) for (let j = 0; j < p; j++) E.push([i, p + j]);
+    return poly(V, E);
+  });
+  const hopf = sgn => {
+    const rings = [[0, 1], [0.3, 12], [0.56, 16], [Math.PI / 4, 18], [1.01, 16], [1.27, 12], [Math.PI / 2, 1]];
+    const segs = [], K = 72;
+    rings.forEach(([eta, m], ri) => {
+      const ce = Math.cos(eta), se = Math.sin(eta);
+      for (let f = 0; f < m; f++) {
+        const ph = 2 * Math.PI * f / m + ri * 0.37;
+        let prev = null;
+        for (let s = 0; s <= K; s++) {
+          const t = 2 * Math.PI * s / K;
+          const pt = [ce * Math.cos(t), ce * Math.sin(t), se * Math.cos(sgn * t + ph), se * Math.sin(sgn * t + ph)];
+          if (prev) segs.push([prev, pt]);
+          prev = pt;
+        }
+      }
+    });
+    return { V: null, segs };
+  };
+  G.hopf = memo(() => hopf(1));
+  G.hopfL = memo(() => hopf(-1));
+
+  const SHAPES = [
+    { name: "Tesserakt", kind: "Regulärer 4D-Körper", sym: "{4,3,3}", geo: G.tess,
+      stats: [["Ecken", 16], ["Kanten", 32], ["Flächen", 24], ["Zellen", 8]],
+      blurb: "Der Würfel der vierten Dimension. Acht Würfel bilden seine Hülle, so wie sechs Quadrate die Hülle eines Würfels bilden.",
+      partner: { name: "16-Zeller", geo: G.cross, scale: 0.9 } },
+    { name: "16-Zeller", kind: "Regulärer 4D-Körper", sym: "{3,3,4}", geo: G.cross,
+      stats: [["Ecken", 8], ["Kanten", 24], ["Flächen", 32], ["Zellen", 16]],
+      blurb: "Das 4D-Gegenstück zum Oktaeder. Sechzehn Tetraeder, und jede Ecke ist mit allen verbunden außer mit ihrer Gegenecke.",
+      partner: { name: "Tesserakt", geo: G.tess, scale: 0.78 } },
+    { name: "5-Zeller", kind: "Regulärer 4D-Körper", sym: "{3,3,3}", geo: G.simplex,
+      stats: [["Ecken", 5], ["Kanten", 10], ["Flächen", 10], ["Zellen", 5]],
+      blurb: "Der einfachste Körper in 4D. Fünf Ecken, jede mit jeder verbunden, fünf Tetraeder als Zellen.",
+      partner: { name: "gespiegelter 5-Zeller", geo: G.simplexD, scale: 0.85 } },
+    { name: "24-Zeller", kind: "Regulärer 4D-Körper", sym: "{3,4,3}", geo: G.c24,
+      stats: [["Ecken", 24], ["Kanten", 96], ["Flächen", 96], ["Zellen", 24]],
+      blurb: "Der einzige reguläre Körper ohne Verwandten in 3D. Er besteht aus 24 Oktaedern und ist zu sich selbst dual.",
+      partner: { name: "dualer 24-Zeller", geo: G.c24d, scale: 0.88 } },
+    { name: "600-Zeller", kind: "Regulärer 4D-Körper", sym: "{3,3,5}", geo: G.c600,
+      stats: [["Ecken", 120], ["Kanten", 720], ["Flächen", 1200], ["Zellen", 600]],
+      blurb: "600 Tetraeder, fünf an jeder Kante. Seine 120 Ecken sind genau die Einheitsquaternionen der binären Ikosaedergruppe.",
+      partner: { name: "120-Zeller", geo: G.c120, scale: 0.9 } },
+    { name: "120-Zeller", kind: "Regulärer 4D-Körper", sym: "{5,3,3}", geo: G.c120,
+      stats: [["Ecken", 600], ["Kanten", 1200], ["Flächen", 720], ["Zellen", 120]],
+      blurb: "Der größte der sechs regulären 4D-Körper: 120 Dodekaeder, von denen sich an jeder Ecke vier treffen.",
+      partner: { name: "600-Zeller", geo: G.c600, scale: 0.86 } },
+    { name: "Duoprisma", kind: "Uniformer 4D-Körper", sym: "{12}×{12}", geo: G.duo,
+      stats: [["Ecken", 144], ["Kanten", 288], ["Flächen", 168], ["Zellen", 24]],
+      blurb: "Das Produkt zweier Zwölfecke. Alle Ecken liegen auf dem Clifford-Torus, einer Fläche, die in 4D vollkommen flach ist.",
+      partner: { name: "12-12-Duopyramide", geo: G.duopyr, scale: 0.84 } },
+    { name: "Hopf-Faserung", kind: "Zerlegung der 3-Sphäre", sym: "S¹ → S³ → S²", geo: G.hopf,
+      stats: [["Großkreise", 76], ["Tori", 5], ["Verschlingung", 1]],
+      blurb: "Die 3-Sphäre, zerlegt in Kreise. Je zwei davon sind genau einmal ineinander verschlungen, und keiner berührt einen anderen.",
+      partner: { name: "gegenläufige Faserung", geo: G.hopfL, scale: 0.8 } },
+  ];
+
+  /* ================= particle sampling ================= */
+  let spare = null;
+  const gauss = () => {
+    if (spare !== null) { const s = spare; spare = null; return s; }
+    let u = 0; while (u === 0) u = Math.random();
+    const v = Math.random(), r = Math.sqrt(-2 * Math.log(u));
+    spare = r * Math.sin(2 * Math.PI * v); return r * Math.cos(2 * Math.PI * v);
+  };
+  // Distribute n particles along the edges of a shape (plus a glow cluster at each vertex). Returns density per unit length.
+  function sampleInto(out, off, shape, n) {
+    const { segs, V } = shape;
+    const nodeN = V ? Math.floor(n * 0.07) : 0, M = n - nodeN;
+    let L = 0; const lens = segs.map(([a, b]) => { const l = Math.sqrt(d2(a, b)); L += l; return l; });
+    let idx = off, cum = 0;
+    for (let s = 0; s < segs.length; s++) {
+      const [a, b] = segs[s];
+      const st = Math.round(cum / L * M); cum += lens[s];
+      const en = s === segs.length - 1 ? M : Math.round(cum / L * M);
+      const c = en - st;
+      for (let k = 0; k < c; k++) {
+        const t = (k + Math.random()) / c, o = idx * 4;
+        for (let d = 0; d < 4; d++) out[o + d] = a[d] + (b[d] - a[d]) * t + gauss() * 0.0032;
+        idx++;
+      }
+    }
+    for (let k = 0; k < nodeN; k++) {
+      const v = V[k % V.length], o = idx * 4;
+      for (let d = 0; d < 4; d++) out[o + d] = v[d] + gauss() * 0.011;
+      idx++;
+    }
+    return M / L;
+  }
+  function cloudInto(out, off, n, r) {
+    for (let k = 0; k < n; k++) {
+      const g = [gauss(), gauss(), gauss(), gauss()], l = Math.hypot(...g) || 1, s = r * Math.cbrt(Math.random()) / l, o = (off + k) * 4;
+      for (let d = 0; d < 4; d++) out[o + d] = g[d] * s;
+    }
+  }
+
+  /* ================= GL programs ================= */
+  function compile(vs, fs) {
+    const p = gl.createProgram();
+    for (const [type, src] of [[gl.VERTEX_SHADER, vs], [gl.FRAGMENT_SHADER, fs]]) {
+      const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
+      if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+      gl.attachShader(p, s);
+    }
+    gl.linkProgram(p);
+    if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+    const u = {}, n = gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS);
+    for (let i = 0; i < n; i++) { const name = gl.getActiveUniform(p, i).name; u[name] = gl.getUniformLocation(p, name); }
+    return { p, u };
+  }
+
+  const PARTICLE_VS = `#version 300 es
+  precision highp float;
+  layout(location=0) in vec4 aFrom;
+  layout(location=1) in vec4 aTo;
+  layout(location=2) in vec2 aAux;
+  uniform mat4 uR4A, uR4B, uView, uProj;
+  uniform float uT, uCurve, uEye, uScaleB, uDual, uOffB, uSlice, uSliceOn, uSize, uPix;
+  uniform vec2 uBright;
+  out vec3 vCol;
+  float hash(float n){ return fract(sin(n)*43758.5453123); }
+  vec3 palA(float t){ t=clamp(t,0.,1.);
+    vec3 a=vec3(0.10,0.26,1.00), b=vec3(0.22,0.95,1.00), c=vec3(1.00,0.26,0.78);
+    return t<0.5 ? mix(a,b,t*2.) : mix(b,c,t*2.-1.); }
+  vec3 palB(float t){ t=clamp(t,0.,1.); return mix(vec3(1.0,0.30,0.06), vec3(1.0,0.80,0.42), t); }
+  void main(){
+    float r = aAux.x; bool isB = aAux.y > 0.5;
+    if (isB && uDual < 0.002) { gl_Position = vec4(2.,2.,2.,1.); gl_PointSize = 0.; vCol = vec3(0.); return; }
+    // staggered morph: a wave sweeps across the body, each particle a little shifted
+    float d = 0.42*(0.3*r + 0.7*(0.5+0.5*clamp(aFrom.x,-1.,1.)));
+    float e = clamp((uT-d)/0.58, 0., 1.); e = e*e*(3.-2.*e);
+    vec4 p = mix(aFrom, aTo, e);
+    float mid = sin(3.14159265*e);
+    // double rotation (xy and zw planes) while in flight
+    float ang = mid*(1.6+2.4*r)*(r>0.5 ? 1. : -1.);
+    float c = cos(ang), s = sin(ang);
+    p = vec4(c*p.x - s*p.y, s*p.x + c*p.y, c*p.z + s*p.w, -s*p.z + c*p.w);
+    vec4 n = vec4(hash(r*91.7), hash(r*47.3+1.), hash(r*13.9+2.), hash(r*71.1+3.))*2.-1.;
+    p += n*mid*0.28;
+    float R0 = isB ? uScaleB : 1.0;
+    p = (isB ? uR4B : uR4A) * (p*R0);
+    // curve=1: push onto the 3-sphere, so edges become great-circle arcs (stereographic)
+    float L = max(length(p), 1e-4);
+    p = mix(p, p*(R0/L), uCurve);
+    float wn = p.w/R0;
+    if (isB) p.w += uOffB;
+    float den = uEye - p.w;
+    float dd = max(den, 0.05);
+    float mag = uEye/dd;
+    vec3 q = p.xyz*mag;                       // 4D -> 3D central projection from (0,0,0,eye)
+    vec4 vp = uView*vec4(q,1.);
+    gl_Position = uProj*vp;                   // 3D -> 2D
+    float dist = max(-vp.z, 0.001);
+    float sl = uSliceOn*exp(-pow((wn-uSlice)*14., 2.));
+    vec3 col = isB ? palB(0.5+0.5*wn) : palA(0.5+0.5*wn);
+    col = mix(col, vec3(1.0,0.97,0.92)*1.5, sl*0.85);
+    float br = (isB ? uBright.y*uDual : uBright.x) * (1.+sl*5.) * (1.+mid*0.7);
+    br *= 1. - uSliceOn*0.6*(1.-sl);
+    float sz = uSize*uPix/dist*(1.+sl*0.8)*min(sqrt(mag), 3.);
+    if (sz < 1.5) { br *= sz*sz/2.25; sz = 1.5; }
+    gl_PointSize = min(sz, 48.);
+    float fade = smoothstep(0.05, 0.22, den)*smoothstep(0.25, 1.2, dist);
+    vCol = col*br*fade;
+  }`;
+  const PARTICLE_FS = `#version 300 es
+  precision mediump float;
+  in vec3 vCol; out vec4 o;
+  void main(){ vec2 c = gl_PointCoord*2.-1.; float r2 = dot(c,c); if (r2 > 1.) discard; o = vec4(vCol*exp(-r2*3.5)*(1.-r2), 1.); }`;
+  const QUAD_VS = `#version 300 es
+  out vec2 vUv;
+  void main(){ vec2 p = vec2((gl_VertexID<<1)&2, gl_VertexID&2); vUv = p; gl_Position = vec4(p*2.-1., 0., 1.); }`;
+  const FADE_FS = `#version 300 es
+  precision mediump float; out vec4 o; void main(){ o = vec4(0.); }`;
+  const DOWN_FS = `#version 300 es
+  precision highp float;
+  in vec2 vUv; out vec4 o;
+  uniform sampler2D uSrc; uniform vec2 uTx; uniform float uThr;
+  void main(){
+    vec3 s = texture(uSrc, vUv).rgb*4.;
+    s += texture(uSrc, vUv-uTx).rgb + texture(uSrc, vUv+uTx).rgb;
+    s += texture(uSrc, vUv+vec2(uTx.x,-uTx.y)).rgb + texture(uSrc, vUv-vec2(uTx.x,-uTx.y)).rgb;
+    s /= 8.;
+    if (uThr > 0.) { float l = max(max(s.r,s.g),s.b); s *= smoothstep(uThr, uThr*4., l); }
+    o = vec4(s, 1.);
+  }`;
+  const UP_FS = `#version 300 es
+  precision highp float;
+  in vec2 vUv; out vec4 o;
+  uniform sampler2D uSrc; uniform vec2 uTx;
+  void main(){
+    vec2 h = uTx;
+    vec3 s = texture(uSrc, vUv+vec2(-2.*h.x,0.)).rgb + texture(uSrc, vUv+vec2(2.*h.x,0.)).rgb
+           + texture(uSrc, vUv+vec2(0.,2.*h.y)).rgb + texture(uSrc, vUv+vec2(0.,-2.*h.y)).rgb;
+    s += 2.*(texture(uSrc, vUv+h).rgb + texture(uSrc, vUv-h).rgb + texture(uSrc, vUv+vec2(h.x,-h.y)).rgb + texture(uSrc, vUv+vec2(-h.x,h.y)).rgb);
+    o = vec4(s/12., 1.);
+  }`;
+  const COMP_FS = `#version 300 es
+  precision highp float;
+  in vec2 vUv; out vec4 o;
+  uniform sampler2D uScene, uBloom; uniform vec2 uRes; uniform float uTime, uBloomK;
+  float h(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7)))*43758.5453); }
+  vec3 aces(vec3 x){ return clamp((x*(2.51*x+0.03))/(x*(2.43*x+0.59)+0.14), 0., 1.); }
+  void main(){
+    vec2 dc = vUv-0.5; float r = length(dc*vec2(uRes.x/uRes.y, 1.));
+    vec2 off = dc*0.004;
+    vec3 col = vec3(texture(uScene, vUv+off).r, texture(uScene, vUv).g, texture(uScene, vUv-off).b);
+    col += texture(uBloom, vUv).rgb*uBloomK;
+    vec3 ground = mix(vec3(0.018,0.024,0.052), vec3(0.003,0.004,0.010), smoothstep(0., 1.1, r));
+    vec2 g = floor(gl_FragCoord.xy/2.);
+    float st = step(0.9976, h(g)), tw = 0.55+0.45*sin(uTime*(1.+h(g+3.)*3.)+h(g)*50.);
+    ground += st*tw*0.3*vec3(0.8,0.86,1.);
+    col = aces((col+ground)*1.1);
+    col *= 1. - 0.5*smoothstep(0.5, 1.3, r);
+    col = pow(col, vec3(1./2.2));
+    col += (h(gl_FragCoord.xy + fract(uTime)*97.) - 0.5)*(2./255.);
+    o = vec4(col, 1.);
+  }`;
+
+  let P, Fade, Down, Up, Comp;
+  try {
+    P = compile(PARTICLE_VS, PARTICLE_FS);
+    Fade = compile(QUAD_VS, FADE_FS);
+    Down = compile(QUAD_VS, DOWN_FS);
+    Up = compile(QUAD_VS, UP_FS);
+    Comp = compile(QUAD_VS, COMP_FS);
+  } catch (err) {
+    console.error(err);
+    fail("Die Grafik-Shader ließen sich auf dieser Grafikkarte nicht übersetzen.<br><small>" + String(err.message || err).slice(0, 300).replace(/</g, "&lt;") + "</small>"); return;
+  }
+
+  /* ================= buffers ================= */
+  const bufs = [gl.createBuffer(), gl.createBuffer()];
+  for (const b of bufs) { gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, TOTAL * 16, gl.DYNAMIC_DRAW); }
+  const aux = new Float32Array(TOTAL * 2);
+  for (let i = 0; i < TOTAL; i++) { aux[i * 2] = Math.random(); aux[i * 2 + 1] = i < N ? 0 : 1; }
+  const auxBuf = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, auxBuf); gl.bufferData(gl.ARRAY_BUFFER, aux, gl.STATIC_DRAW);
+  const vao = gl.createVertexArray();
+  gl.bindVertexArray(vao);
+  gl.enableVertexAttribArray(2); gl.vertexAttribPointer(2, 2, gl.FLOAT, false, 0, 0);
+  gl.enableVertexAttribArray(0); gl.enableVertexAttribArray(1);
+  function bindFromTo(fi) {
+    gl.bindVertexArray(vao);
+    gl.bindBuffer(gl.ARRAY_BUFFER, bufs[fi]); gl.vertexAttribPointer(0, 4, gl.FLOAT, false, 0, 0);
+    gl.bindBuffer(gl.ARRAY_BUFFER, bufs[1 - fi]); gl.vertexAttribPointer(1, 4, gl.FLOAT, false, 0, 0);
+  }
+  const quadVao = gl.createVertexArray();
+  const scratch = new Float32Array(TOTAL * 4);
+
+  /* ================= render targets ================= */
+  let W = 1, H = 1, scene = null, mips = [];
+  const LEVELS = 6;
+  function target(w, h) {
+    const tex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    if (hasFloat) gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, w, h, 0, gl.RGBA, gl.HALF_FLOAT, null);
+    else gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    const fbo = gl.createFramebuffer();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+    gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT);
+    return { tex, fbo, w, h };
+  }
+  const drop = t => { if (t) { gl.deleteTexture(t.tex); gl.deleteFramebuffer(t.fbo); } };
+  let pixelRatio = 1;
+  function resize() {
+    pixelRatio = Math.min(devicePixelRatio || 1, small ? 1.5 : 2);
+    const w = Math.max(1, Math.round(canvas.clientWidth * pixelRatio)), h = Math.max(1, Math.round(canvas.clientHeight * pixelRatio));
+    if (w === W && h === H && scene) return;
+    W = w; H = h; canvas.width = W; canvas.height = H;
+    drop(scene); mips.forEach(drop);
+    scene = target(W, H);
+    mips = [];
+    let mw = W, mh = H;
+    for (let i = 0; i < LEVELS; i++) { mw = Math.max(1, mw >> 1); mh = Math.max(1, mh >> 1); mips.push(target(mw, mh)); }
+  }
+  addEventListener("resize", resize);
+
+  /* ================= state ================= */
+  const state = {
+    shape: 0, pending: null, morphing: true, mt: 0, morphDur: 3.6, hold: 0, holdDur: 7.5,
+    fromIdx: 0, brFrom: [0, 0], brTo: [0, 0], scFrom: 1, scTo: 1,
+    auto: false, dual: 1, dualOn: true, slice: 0, sliceOn: false, trails: !reduced,
+    stereo: true, curve: 1, eye: 1.08, speed: reduced ? 0.35 : 1, t: 0,
+    yaw: 0.6, pitch: 0.28, dist: 4.6, vyaw: 0, vpitch: 0, u1: 0, u2: 0, vu1: 0, vu2: 0,
+  };
+  const BK = 140; // brightness constant: brightness = BK / particles-per-unit-length
+
+  function load(j, fromCloud) {
+    const s = SHAPES[j];
+    if (fromCloud) {
+      cloudInto(scratch, 0, TOTAL, 1.7);
+      gl.bindBuffer(gl.ARRAY_BUFFER, bufs[0]); gl.bufferSubData(gl.ARRAY_BUFFER, 0, scratch);
+      state.fromIdx = 0; state.brFrom = [0.12, 0.12]; state.scFrom = s.partner.scale;
+    } else {
+      state.fromIdx = 1 - state.fromIdx;
+      state.brFrom = state.brTo.slice(); state.scFrom = state.scTo;
+    }
+    const dA = sampleInto(scratch, 0, s.geo(), N);
+    const dB = sampleInto(scratch, N, s.partner.geo(), N);
+    gl.bindBuffer(gl.ARRAY_BUFFER, bufs[1 - state.fromIdx]); gl.bufferSubData(gl.ARRAY_BUFFER, 0, scratch);
+    bindFromTo(state.fromIdx);
+    state.brTo = [BK / dA, BK / dB * 0.8]; state.scTo = s.partner.scale;
+    state.shape = j; state.mt = 0; state.morphing = true; state.hold = 0;
+    showInfo(j);
+    if (!fromCloud) audio?.morph(j);
+  }
+  function go(j) {
+    j = (j + SHAPES.length) % SHAPES.length;
+    if (state.morphing) { state.pending = j; return; }
+    if (j === state.shape) return;
+    load(j, false);
+  }
+
+  /* ================= HUD ================= */
+  const $ = id => document.getElementById(id);
+  const chipsEl = $("shapes");
+  const chips = SHAPES.map((s, i) => {
+    const b = document.createElement("button");
+    b.className = "chip"; b.type = "button";
+    b.innerHTML = `<kbd>${i + 1}</kbd><span></span>`;
+    b.querySelector("span").textContent = s.name;
+    b.addEventListener("click", () => { go(i); });
+    chipsEl.appendChild(b); return b;
+  });
+  function showInfo(j) {
+    const s = SHAPES[j];
+    $("kind").textContent = s.kind; $("sym").textContent = s.sym;
+    const h = $("name"); h.textContent = s.name; h.classList.remove("in"); void h.offsetWidth; h.classList.add("in");
+    $("blurb").textContent = s.blurb;
+    $("stats").innerHTML = s.stats.map(([k, v]) => `<div><dt>${k}</dt><dd>${v.toLocaleString("de-DE")}</dd></div>`).join("");
+    $("pname").textContent = s.partner.name;
+    chips.forEach((c, i) => { c.setAttribute("aria-current", i === j ? "true" : "false"); if (i !== j) c.style.setProperty("--p", 0); });
+    chips[j].scrollIntoView({ block: "nearest", inline: "nearest", behavior: reduced ? "auto" : "smooth" });
+  }
+  const setPressed = (el, v) => el.setAttribute("aria-pressed", v ? "true" : "false");
+  function setProj(stereo) { state.stereo = stereo; setPressed($("pStereo"), stereo); setPressed($("pCentral"), !stereo); }
+  function setDual(v) { state.dualOn = v; setPressed($("tDual"), v); $("partner").classList.toggle("off", !v); }
+  function setSlice(v) { state.sliceOn = v; setPressed($("tSlice"), v); }
+  function setTrail(v) { state.trails = v; setPressed($("tTrail"), v); }
+  function setAuto(v) { state.auto = v; setPressed($("tAuto"), v); state.hold = 0; }
+  $("pStereo").onclick = () => setProj(true);
+  $("pCentral").onclick = () => setProj(false);
+  $("tDual").onclick = () => setDual(!state.dualOn);
+  $("tSlice").onclick = () => setSlice(!state.sliceOn);
+  $("tTrail").onclick = () => setTrail(!state.trails);
+  $("tAuto").onclick = () => setAuto(!state.auto);
+  const speedEl = $("speed");
+  speedEl.value = state.speed;
+  speedEl.oninput = () => { state.speed = +speedEl.value; };
+  setTrail(state.trails);
+  setAuto(false);
+
+  addEventListener("keydown", e => {
+    if (e.target.tagName === "INPUT" || e.metaKey || e.ctrlKey || e.altKey) return;
+    const k = e.key.toLowerCase();
+    if (k >= "1" && k <= "8") go(+k - 1);
+    else if (k === "arrowright") go(state.shape + 1);
+    else if (k === "arrowleft") go(state.shape - 1);
+    else if (k === "p") setProj(!state.stereo);
+    else if (k === "d") setDual(!state.dualOn);
+    else if (k === "s") setSlice(!state.sliceOn);
+    else if (k === "t") setTrail(!state.trails);
+    else if (k === "a") setAuto(!state.auto);
+    else if (k === "h") document.body.classList.toggle("bare");
+    else if (k === "f") { if (document.fullscreenElement) document.exitFullscreen?.(); else document.documentElement.requestFullscreen?.().catch(() => {}); }
+    else if (k === " ") { e.preventDefault(); state.speed = state.speed > 0 ? 0 : 1; speedEl.value = state.speed; }
+    else return;
+  });
+
+  /* ================= pointer ================= */
+  const ptrs = new Map();
+  let fourD = false, pinch = 0;
+  canvas.addEventListener("contextmenu", e => e.preventDefault());
+  canvas.addEventListener("pointerdown", e => {
+    canvas.setPointerCapture(e.pointerId);
+    ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    fourD = e.shiftKey || e.button === 2;
+    if (ptrs.size === 2) { const [a, b] = [...ptrs.values()]; pinch = Math.hypot(a.x - b.x, a.y - b.y); }
+  });
+  canvas.addEventListener("pointermove", e => {
+    const p = ptrs.get(e.pointerId); if (!p) return;
+    const dx = e.clientX - p.x, dy = e.clientY - p.y; p.x = e.clientX; p.y = e.clientY;
+    if (ptrs.size === 1) {
+      if (fourD || e.shiftKey) { state.vu1 = dx * 0.006; state.vu2 = dy * 0.006; state.u1 += state.vu1; state.u2 += state.vu2; }
+      else { state.vyaw = -dx * 0.005; state.vpitch = dy * 0.005; state.yaw += state.vyaw; state.pitch += state.vpitch; }
+    } else if (ptrs.size === 2) {
+      state.vu1 = dx * 0.003; state.vu2 = dy * 0.003; state.u1 += state.vu1; state.u2 += state.vu2;
+      const [a, b] = [...ptrs.values()]; const d = Math.hypot(a.x - b.x, a.y - b.y);
+      if (pinch > 0 && d > 0) state.dist = Math.min(14, Math.max(1.6, state.dist * pinch / d));
+      pinch = d;
+    }
+    state.pitch = Math.max(-1.45, Math.min(1.45, state.pitch));
+  });
+  const up = e => { ptrs.delete(e.pointerId); pinch = 0; };
+  canvas.addEventListener("pointerup", up);
+  canvas.addEventListener("pointercancel", up);
+  canvas.addEventListener("wheel", e => { e.preventDefault(); state.dist = Math.min(14, Math.max(1.6, state.dist * Math.exp(e.deltaY * 0.001))); }, { passive: false });
+
+  /* ================= math ================= */
+  function rot4(list) {
+    const M = [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]];
+    for (const [i, j, a] of list) {
+      const c = Math.cos(a), s = Math.sin(a);
+      for (let r = 0; r < 4; r++) { const mi = M[r][i], mj = M[r][j]; M[r][i] = mi * c - mj * s; M[r][j] = mi * s + mj * c; }
+    }
+    const out = new Float32Array(16);
+    for (let c = 0; c < 4; c++) for (let r = 0; r < 4; r++) out[c * 4 + r] = M[r][c];
+    return out;
+  }
+  function perspective(fovy, asp, n, f) {
+    const t = 1 / Math.tan(fovy / 2);
+    return new Float32Array([t / asp, 0, 0, 0, 0, t, 0, 0, 0, 0, (f + n) / (n - f), -1, 0, 0, 2 * f * n / (n - f), 0]);
+  }
+  function lookAt(e) {
+    const fl = Math.hypot(...e), f = e.map(x => -x / fl);
+    let r = [f[1] * 0 - f[2] * 1, f[2] * 0 - f[0] * 0, f[0] * 1 - f[1] * 0]; // f × up(0,1,0)
+    const rl = Math.hypot(...r) || 1; r = r.map(x => x / rl);
+    const u = [r[1] * f[2] - r[2] * f[1], r[2] * f[0] - r[0] * f[2], r[0] * f[1] - r[1] * f[0]];
+    const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+    return new Float32Array([r[0], u[0], -f[0], 0, r[1], u[1], -f[1], 0, r[2], u[2], -f[2], 0, -dot(r, e), -dot(u, e), dot(f, e), 1]);
+  }
+
+  /* ================= sound =================
+     Drone on a Solfeggio root per body, voices breathe with the 4D rotation,
+     a binaural theta beat underneath, shimmer + bells while the bodies transform. */
+  const KEY = 110; // A2 – every sound lives in A-major pentatonic, just intonation
+  const ROOTS = [1, 3 / 2, 5 / 4, 9 / 8, 5 / 3, 1, 3 / 2, 5 / 4].map(r => KEY * r);
+  const SCALE = [1, 9 / 8, 5 / 4, 3 / 2, 5 / 3];
+  const snap = f => { let o = KEY / 2; while (o * 2 <= f) o *= 2; let best = o, bd = 1e9; for (let k = 0; k < 2; k++) for (const r of SCALE) { const c = o * Math.pow(2, k) * r, d = Math.abs(Math.log(c / f)); if (d < bd) { bd = d; best = c; } } return best; };
+  let muteUntil = 0;
+  let audio = null;
+  function makeAudio() {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return null;
+    const ac = new AC();
+    const out = ac.createDynamicsCompressor(); out.threshold.value = -18; out.ratio.value = 3;
+    const master = ac.createGain(); master.gain.value = 0;
+    out.connect(master); master.connect(ac.destination);
+    master.gain.setTargetAtTime(0.9, ac.currentTime, 1.5);
+
+    // long, dark hall reverb from shaped noise
+    const rev = ac.createConvolver();
+    const len = ac.sampleRate * 6, ir = ac.createBuffer(2, len, ac.sampleRate);
+    for (let c = 0; c < 2; c++) { const d = ir.getChannelData(c); for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3.2); }
+    rev.buffer = ir;
+    const wet = ac.createGain(); wet.gain.value = 0.85; rev.connect(wet); wet.connect(out);
+    const tone = ac.createBiquadFilter(); tone.type = "lowpass"; tone.frequency.value = 700; tone.Q.value = 2.5;
+    const dry = ac.createGain(); dry.gain.value = 0.55;
+    tone.connect(dry); dry.connect(out); tone.connect(rev);
+
+    const root = ROOTS[state.shape];
+    const RATIOS = [0.5, 1, 1.5, 2, 3, 4.5];
+    const voices = RATIOS.map((r, i) => {
+      const o1 = ac.createOscillator(), o2 = ac.createOscillator();
+      o1.type = i < 2 ? "sine" : "triangle"; o2.type = "sine";
+      o1.frequency.value = root * r; o2.frequency.value = root * r; o2.detune.value = 2 + i * 0.5;
+      const g = ac.createGain(); g.gain.value = 0;
+      const pan = ac.createStereoPanner();
+      o1.connect(g); o2.connect(g); g.connect(pan); pan.connect(tone);
+      o1.start(); o2.start();
+      return { r, o1, o2, g, pan, base: [0.16, 0.13, 0.08, 0.06, 0.035, 0.022][i] };
+    });
+
+    // binaural theta beat (6 Hz difference between the ears)
+    const bin = [0, 6].map((df, i) => {
+      const o = ac.createOscillator(); o.frequency.value = root / 2 + df;
+      const g = ac.createGain(); g.gain.value = 0.05;
+      const p = ac.createStereoPanner(); p.pan.value = i ? 1 : -1;
+      o.connect(g); g.connect(p); p.connect(out); o.start(); return o;
+    });
+
+    // shimmer: filtered noise that swells during a transformation
+    const nb = ac.createBuffer(1, ac.sampleRate * 2, ac.sampleRate), nd = nb.getChannelData(0);
+    for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
+    const noise = ac.createBufferSource(); noise.buffer = nb; noise.loop = true;
+    const nbp = ac.createBiquadFilter(); nbp.type = "bandpass"; nbp.Q.value = 9; nbp.frequency.value = 800;
+    const ng = ac.createGain(); ng.gain.value = 0;
+    noise.connect(nbp); nbp.connect(ng); ng.connect(rev); ng.connect(out); noise.start();
+
+    // singing resonance that follows the 3D slice through w
+    const sbp = ac.createBiquadFilter(); sbp.type = "bandpass"; sbp.Q.value = 18;
+    const sg = ac.createGain(); sg.gain.value = 0;
+    voices.forEach(v => v.pan.connect(sbp)); sbp.connect(sg); sg.connect(rev);
+
+    function bell(f, t0, amp) {
+      [1, 2.76, 5.4, 8.93].forEach((m, i) => {
+        const o = ac.createOscillator(), g = ac.createGain();
+        o.frequency.value = f * m;
+        g.gain.setValueAtTime(0, t0); g.gain.linearRampToValueAtTime(amp / (i + 1), t0 + 0.01);
+        g.gain.exponentialRampToValueAtTime(0.0001, t0 + 5 / (i + 1));
+        o.connect(g); g.connect(rev); g.connect(out);
+        o.start(t0); o.stop(t0 + 5.2);
+      });
+    }
+
+    function hang(f, t0, amp, pan) {
+      // hang drum: fundamental + octave + twelfth, soft attack, long ringing decay
+      const p = ac.createStereoPanner(); p.pan.value = pan; p.connect(rev); p.connect(out);
+      [[1, 1, 2.8], [2, 0.35, 1.6], [3, 0.12, 0.9], [5.02, 0.04, 0.35]].forEach(([m, a, d]) => {
+        const o = ac.createOscillator(), g = ac.createGain();
+        o.frequency.value = f * m;
+        g.gain.setValueAtTime(0, t0); g.gain.linearRampToValueAtTime(amp * a, t0 + 0.006);
+        g.gain.exponentialRampToValueAtTime(0.0001, t0 + d);
+        o.connect(g); g.connect(p); o.start(t0); o.stop(t0 + d + 0.05);
+      });
+    }
+    return {
+      ac, hang,
+      morph(j) {
+        const f = ROOTS[j], now = ac.currentTime;
+        muteUntil = now + 0.35;
+        voices.forEach(v => { v.g.gain.cancelScheduledValues(now); v.g.gain.setTargetAtTime(0, now, 0.06); v.o1.frequency.setValueAtTime(f * v.r, now + 0.3); v.o2.frequency.setValueAtTime(f * v.r, now + 0.3); });
+        bin[0].frequency.setValueAtTime(f / 2, now + 0.3); bin[1].frequency.setValueAtTime(f / 2 + 6, now + 0.3);
+        bell(f * 4, now + 0.02, 0.09);
+        bell(f * 6, now + 0.9, 0.05);
+      },
+      update(R4A, R4B, mid, motion, slice, sliceW, dual, speed) {
+        const now = ac.currentTime, k = 0.12;
+        if (now > muteUntil) voices.forEach((v, i) => {
+          const m = Math.abs(R4A[i % 16 * 5 % 16]);   // a diagonal-ish matrix entry, pulses as the body turns
+          v.g.gain.setTargetAtTime(v.base * (0.25 + 0.75 * m) * (1 + mid * 0.6) * (i >= 4 ? 0.5 + 0.5 * dual : 1), now, k);
+          v.pan.pan.setTargetAtTime(Math.max(-1, Math.min(1, R4B[(i * 3 + 1) % 16] * 0.9)), now, k);
+        });
+        tone.frequency.setTargetAtTime(420 + 2600 * mid + 1800 * Math.min(1, motion) + 300 * speed, now, 0.15);
+        ng.gain.setTargetAtTime(0.16 * mid * mid, now, 0.1);
+        nbp.frequency.setValueAtTime(snap(500 + 5000 * mid), now);
+        sg.gain.setTargetAtTime(0.9 * slice, now, 0.2);
+        sbp.frequency.setValueAtTime(snap(ROOTS[state.shape] * Math.pow(2, 2 + 1.5 * (sliceW + 1))), now);
+      },
+    };
+  }
+  function setSound(v) {
+    setPressed($("tSound"), v);
+    if (v) {
+      if (!audio) audio = makeAudio();
+      audio?.ac.resume();
+    } else audio?.ac.suspend();
+  }
+  const ensureSound = () => { if (!audio || audio.ac.state !== "running") setSound(true); };
+  $("prev").onclick = () => { ensureSound(); go(state.shape - 1); };
+  $("next").onclick = () => { ensureSound(); go(state.shape + 1); };
+  const toggleCockpit = () => { const on = document.body.classList.toggle("cockpit"); setPressed($("cockpit"), on); $("cockpit").textContent = on ? "cockpit on" : "cockpit off"; };
+  $("cockpit").onclick = toggleCockpit;
+  // invitation: visible at start and again after a long idle spell
+  const invite = $("invite");
+  let idleTimer = 0;
+  const woke = () => { invite.classList.add("gone"); clearTimeout(idleTimer); idleTimer = setTimeout(() => invite.classList.remove("gone"), 25000); };
+  ["pointermove", "pointerdown", "keydown", "wheel", "touchstart"].forEach(ev => addEventListener(ev, woke, { passive: true }));
+  addEventListener("keydown", e => { if (e.key.toLowerCase() === "c" && e.target.tagName !== "INPUT" && !e.metaKey && !e.ctrlKey) toggleCockpit(); });
+  $("tSound").onclick = () => setSound($("tSound").getAttribute("aria-pressed") !== "true");
+  addEventListener("keydown", e => { if (e.key.toLowerCase() === "m" && e.target.tagName !== "INPUT") setSound($("tSound").getAttribute("aria-pressed") !== "true"); });
+
+  /* ================= hang drum interaction =================
+     Y chooses the note (pentatonic on the body's root), X pans. Moving plays soft single notes,
+     a click plays a short rhythmic figure that always resolves to the root. */
+  const PENTA = [1, 9 / 8, 5 / 4, 3 / 2, 5 / 3, 2, 9 / 4, 5 / 2, 3, 10 / 3, 4];
+  const NAMES = ["A", "H", "C♯", "E", "F♯", "A", "H", "C♯", "E", "F♯", "A"];
+  const HUES = [196, 212, 250, 290, 320, 196, 212, 250, 290, 320, 196];
+  const fxC = document.getElementById("fx"), fx = fxC.getContext("2d"), rings = [];
+  let cur = { x: -99, y: -99, on: false }, curPulse = 0;
+  function spawn(x, y, idx, big, delay) {
+    setTimeout(() => { rings.push({ x, y, t: performance.now(), h: HUES[idx], name: NAMES[idx], big, a: Math.random() * 6.28 }); curPulse = 1; }, delay * 1000);
+  }
+  function drawFx() {
+    const dpr = Math.min(devicePixelRatio || 1, 2);
+    if (fxC.width !== Math.round(innerWidth * dpr)) { fxC.width = Math.round(innerWidth * dpr); fxC.height = Math.round(innerHeight * dpr); }
+    fx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    fx.clearRect(0, 0, innerWidth, innerHeight);
+    fx.globalCompositeOperation = "lighter";
+    const now = performance.now();
+    for (let i = rings.length - 1; i >= 0; i--) {
+      const r = rings[i], age = (now - r.t) / 1000, life = r.big ? 2.6 : 1.6;
+      if (age > life) { rings.splice(i, 1); continue; }
+      const k = age / life, a = (1 - k) * (1 - k);
+      const rad = (r.big ? 26 : 14) + age * (r.big ? 150 : 90);
+      fx.strokeStyle = `hsla(${r.h},95%,68%,${a * 0.9})`; fx.lineWidth = r.big ? 2 : 1.2;
+      fx.shadowColor = `hsl(${r.h},100%,60%)`; fx.shadowBlur = 14;
+      fx.beginPath(); fx.arc(r.x, r.y, rad, 0, 6.2832); fx.stroke();
+      fx.beginPath(); fx.arc(r.x, r.y, rad * 0.62, 0, 6.2832); fx.globalAlpha = 0.4; fx.stroke(); fx.globalAlpha = 1;
+      // the note flies out of the circle and names itself
+      const nx = r.x + Math.cos(r.a) * rad * 0.9, ny = r.y + Math.sin(r.a) * rad * 0.9 - age * 18;
+      fx.fillStyle = `hsla(${r.h},100%,82%,${a})`; fx.shadowBlur = 10;
+      fx.beginPath(); fx.arc(nx, ny, r.big ? 3.2 : 2.2, 0, 6.2832); fx.fill();
+      fx.font = `${r.big ? 15 : 12}px "Instrument Serif", Georgia, serif`;
+      fx.fillText(r.name, nx + 7, ny - 6);
+    }
+    if (cur.on) {
+      curPulse *= 0.9;
+      const rad = 18 + curPulse * 8;
+      fx.shadowColor = "#4df2ff"; fx.shadowBlur = 16 + curPulse * 20;
+      fx.strokeStyle = `rgba(200,245,255,${0.55 + curPulse * 0.4})`; fx.lineWidth = 1.4;
+      fx.beginPath(); fx.arc(cur.x, cur.y, rad, 0, 6.2832); fx.stroke();
+      fx.fillStyle = "rgba(230,250,255,0.9)";
+      fx.beginPath(); fx.arc(cur.x, cur.y, 2.2, 0, 6.2832); fx.fill();
+    }
+    fx.shadowBlur = 0; fx.globalCompositeOperation = "source-over";
+  }
+  canvas.addEventListener("pointermove", e => { cur = { x: e.clientX, y: e.clientY, on: true }; });
+  canvas.addEventListener("pointerleave", () => { cur.on = false; });
+  const FIGURES = [[0, 2, 4, 2], [0, 1, 2, 4, 0], [4, 2, 1, 0], [0, 4, 2, 5, 4], [2, 0, 2, 4, 7]];
+  const STEPS = [0, .18, .36, .54, .81, 1.08, 1.35];
+  let lastCell = -1, lastNote = 0;
+  const idxAt = (y, off = 0) => Math.max(0, Math.min(PENTA.length - 1, Math.floor((1 - y) * 8) + off));
+  const noteAt = (y, off = 0) => KEY * 2 * PENTA[idxAt(y, off)];
+  function moveAt(cx, cy) {
+    if (!Number.isFinite(cx + cy) || !innerWidth || !innerHeight) return;
+    if (!audio || audio.ac.state !== "running") return;
+    const x = cx / innerWidth, y = cy / innerHeight;
+    const cell = Math.floor((1 - y) * 8) * 6 + Math.floor(x * 6);
+    const now = audio.ac.currentTime;
+    if (cell !== lastCell && now - lastNote > 0.14) {
+      lastCell = cell; lastNote = now;
+      audio.hang(noteAt(y), now, 0.05, x * 1.6 - 0.8);
+      spawn(cx, cy, idxAt(y), false, 0);
+    }
+  }
+  function clickAt(cx, cy) {
+    if (!Number.isFinite(cx + cy) || !innerWidth || !innerHeight) return;
+    if (!audio || audio.ac.state !== "running") setSound(true);
+    if (!audio) return;
+    const x = cx / innerWidth, y = cy / innerHeight;
+    const fig = FIGURES[Math.min(FIGURES.length - 1, Math.max(0, Math.floor(x * FIGURES.length)))];
+    const t0 = audio.ac.currentTime + 0.03, pan = x * 1.6 - 0.8, beat = 0.9 / Math.max(0.5, state.speed);
+    fig.forEach((d, i) => { audio.hang(noteAt(y, d - 2), t0 + STEPS[i] * beat, i === 0 ? 0.16 : 0.1, pan + (i % 2 ? .2 : -.2)); spawn(cx, cy, idxAt(y, d - 2), true, STEPS[i] * beat); });
+    audio.hang(KEY * 2, t0 + STEPS[fig.length] * beat, 0.13, 0);   // resolve to the tonic
+    spawn(cx, cy, 0, true, STEPS[fig.length] * beat);
+    state.vu1 += (x - 0.5) * 0.04; state.vu2 += (y - 0.5) * 0.04;             // the click nudges the 4D rotation
+  }
+  let userActiveAt = -1e9;
+  canvas.addEventListener("pointermove", e => { userActiveAt = performance.now(); if (!ptrs.size) moveAt(e.clientX, e.clientY); });
+  let downAt = null;
+  canvas.addEventListener("pointerdown", e => { downAt = { x: e.clientX, y: e.clientY }; userActiveAt = performance.now(); });
+  canvas.addEventListener("pointerup", e => {
+    if (!downAt || Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y) > 6) return;
+    clickAt(e.clientX, e.clientY);
+  });
+
+  /* ---------- auto play: a ghost cursor wanders slowly, every ~3 s a new short leg, sometimes it clicks ---------- */
+  const ap = { on: false, x: 0, y: 0, fx: 0, fy: 0, tx: 0, ty: 0, t0: 0, dur: 3000 };
+  function apLeg(now) {
+    const m = 0.12, span = Math.min(innerWidth, innerHeight) * (0.08 + Math.random() * 0.1), a = Math.random() * Math.PI * 2;
+    ap.fx = ap.x; ap.fy = ap.y;
+    ap.tx = Math.min(innerWidth * (1 - m), Math.max(innerWidth * m, ap.x + Math.cos(a) * span));
+    ap.ty = Math.min(innerHeight * (1 - m), Math.max(innerHeight * m, ap.y + Math.sin(a) * span));
+    ap.t0 = now; ap.dur = 2600 + Math.random() * 900;
+  }
+  function setAutoPlay(on) {
+    ap.on = on;
+    const b = $("autoplay"); setPressed(b, on); b.textContent = on ? "auto play on" : "auto play off";
+    if (on) {
+      if (!audio || audio.ac.state !== "running") setSound(true);
+      ap.x = innerWidth * (0.2 + Math.random() * 0.6); ap.y = innerHeight * (0.2 + Math.random() * 0.6);
+      apLeg(performance.now());
+      clickAt(ap.x, ap.y);
+    } else cur.on = false;
+  }
+  $("autoplay").onclick = () => setAutoPlay(!ap.on);
+  (function apTick(now) {
+    if (ap.on && now - userActiveAt > 4000) {
+      let k = (now - ap.t0) / ap.dur;
+      if (k >= 1) {
+        ap.x = ap.tx; ap.y = ap.ty;
+        if (Math.random() < 0.35) clickAt(ap.x, ap.y);
+        apLeg(now); k = 0;
+      }
+      const e = k * k * (3 - 2 * k);
+      ap.x = ap.fx + (ap.tx - ap.fx) * e; ap.y = ap.fy + (ap.ty - ap.fy) * e;
+      cur = { x: ap.x, y: ap.y, on: true };
+      moveAt(ap.x, ap.y);
+    }
+    requestAnimationFrame(apTick);
+  })(performance.now());
+
+  /* ================= frame ================= */
+  const FOV = 45 * Math.PI / 180;
+  let last = performance.now(), fpsAcc = 0, fpsN = 0, fpsT = 0;
+  const pcEl = $("pc"), fpsEl = $("fps");
+
+  function drawQuad() { gl.bindVertexArray(quadVao); gl.drawArrays(gl.TRIANGLES, 0, 3); }
+
+  function frame(now) {
+    const dt = Math.min((now - last) / 1000, 0.05); last = now;
+    const sp = state.speed;
+    state.t += dt * sp;
+    const t = state.t;
+
+    // morph timeline
+    if (state.morphing) {
+      state.mt += dt / state.morphDur;
+      if (state.mt >= 1) { state.mt = 1; state.morphing = false; state.hold = 0; state.morphDur = 2.9; }
+    } else if (state.pending !== null) {
+      const j = state.pending; state.pending = null; if (j !== state.shape) load(j, false);
+    } else if (state.auto) {
+      state.hold += dt;
+      if (state.hold >= state.holdDur) go(state.shape + 1);
+    }
+    chips[state.shape].style.setProperty("--p", state.auto && !state.morphing ? Math.min(1, state.hold / state.holdDur) : 0);
+
+    // camera inertia and drift
+    if (ptrs.size === 0) {
+      const k = Math.pow(0.9, dt * 60);
+      state.yaw += state.vyaw; state.pitch += state.vpitch; state.vyaw *= k; state.vpitch *= k;
+      state.u1 += state.vu1; state.u2 += state.vu2; state.vu1 *= k; state.vu2 *= k;
+      state.pitch = Math.max(-1.45, Math.min(1.45, state.pitch));
+    }
+    state.yaw += dt * 0.05 * sp;
+    const ease = 1 - Math.exp(-dt * 3);
+    state.curve += ((state.stereo ? 1 : 0) - state.curve) * ease;
+    state.eye += ((state.stereo ? 1.08 : 2.3) - state.eye) * ease;
+    state.dual += ((state.dualOn ? 1 : 0) - state.dual) * ease;
+    if (state.dual < 0.003 && !state.dualOn) state.dual = 0;
+    state.slice += ((state.sliceOn ? 1 : 0) - state.slice) * ease;
+
+    resize();
+    const asp = W / H;
+    const dist = state.dist * Math.max(1, 0.78 / asp);
+    const cp = Math.cos(state.pitch);
+    const eye3 = [dist * cp * Math.sin(state.yaw), dist * Math.sin(state.pitch), dist * cp * Math.cos(state.yaw)];
+
+    const mt = state.mt, lerp = (a, b) => a + (b - a) * mt;
+    const R4A = rot4([[0, 3, state.u1], [1, 3, state.u2], [0, 3, t * 0.29], [1, 2, t * 0.17], [2, 3, t * 0.11], [0, 1, t * 0.07]]);
+    const R4B = rot4([[0, 3, state.u1], [1, 3, state.u2], [0, 3, -t * 0.23], [1, 2, t * 0.23], [0, 2, t * 0.05]]);
+
+    // 1) particles into the HDR scene (with optional afterglow)
+    gl.bindFramebuffer(gl.FRAMEBUFFER, scene.fbo);
+    gl.viewport(0, 0, W, H);
+    gl.enable(gl.BLEND);
+    let decay = 0;
+    if (state.trails) {
+      decay = Math.pow(0.72, dt * 60);
+      gl.useProgram(Fade.p);
+      gl.blendColor(0, 0, 0, decay);
+      gl.blendFunc(gl.ZERO, gl.CONSTANT_ALPHA);
+      drawQuad();
+    } else { gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT); }
+    gl.blendFunc(gl.ONE, gl.ONE);
+    gl.useProgram(P.p);
+    const u = P.u;
+    gl.uniformMatrix4fv(u.uR4A, false, R4A);
+    gl.uniformMatrix4fv(u.uR4B, false, R4B);
+    gl.uniformMatrix4fv(u.uView, false, lookAt(eye3));
+    gl.uniformMatrix4fv(u.uProj, false, perspective(FOV, asp, 0.05, 100));
+    gl.uniform1f(u.uT, mt);
+    gl.uniform1f(u.uCurve, state.curve);
+    gl.uniform1f(u.uEye, state.eye);
+    gl.uniform1f(u.uScaleB, lerp(state.scFrom, state.scTo));
+    gl.uniform1f(u.uDual, state.dual);
+    gl.uniform1f(u.uOffB, (0.55 + (0.17 - 0.55) * state.curve) * Math.sin(t * 0.47));
+    gl.uniform1f(u.uSlice, 0.92 * Math.sin(t * 0.55));
+    gl.uniform1f(u.uSliceOn, state.slice);
+    gl.uniform1f(u.uSize, 0.0115);
+    gl.uniform1f(u.uPix, H / (2 * Math.tan(FOV / 2)));
+    const trailK = state.trails ? (1 - decay) : 1;
+    gl.uniform2f(u.uBright, lerp(state.brFrom[0], state.brTo[0]) * trailK, lerp(state.brFrom[1], state.brTo[1]) * trailK);
+    gl.bindVertexArray(vao);
+    gl.drawArrays(gl.POINTS, 0, TOTAL);
+
+    // 2) bloom: dual-filter downsample chain, then additive upsample
+    gl.disable(gl.BLEND);
+    gl.useProgram(Down.p);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.uniform1i(Down.u.uSrc, 0);
+    let src = scene;
+    for (let i = 0; i < LEVELS; i++) {
+      const dst = mips[i];
+      gl.bindFramebuffer(gl.FRAMEBUFFER, dst.fbo); gl.viewport(0, 0, dst.w, dst.h);
+      gl.bindTexture(gl.TEXTURE_2D, src.tex);
+      gl.uniform2f(Down.u.uTx, 1 / src.w, 1 / src.h);
+      gl.uniform1f(Down.u.uThr, i === 0 ? 0.08 : 0);
+      drawQuad(); src = dst;
+    }
+    gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE);
+    gl.useProgram(Up.p); gl.uniform1i(Up.u.uSrc, 0);
+    for (let i = LEVELS - 2; i >= 0; i--) {
+      const s = mips[i + 1], d = mips[i];
+      gl.bindFramebuffer(gl.FRAMEBUFFER, d.fbo); gl.viewport(0, 0, d.w, d.h);
+      gl.bindTexture(gl.TEXTURE_2D, s.tex);
+      gl.uniform2f(Up.u.uTx, 0.5 / s.w, 0.5 / s.h);
+      drawQuad();
+    }
+    gl.disable(gl.BLEND);
+
+    // 3) composite: chromatic fringe, bloom, ACES tone mapping, vignette, grain
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, W, H);
+    gl.useProgram(Comp.p);
+    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, scene.tex); gl.uniform1i(Comp.u.uScene, 0);
+    gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, mips[0].tex); gl.uniform1i(Comp.u.uBloom, 1);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.uniform2f(Comp.u.uRes, W, H);
+    gl.uniform1f(Comp.u.uTime, now / 1000);
+    gl.uniform1f(Comp.u.uBloomK, 0.55);
+    drawQuad();
+
+    if (audio && audio.ac.state === "running") {
+      const motion = (Math.abs(state.vyaw) + Math.abs(state.vpitch) + Math.abs(state.vu1) + Math.abs(state.vu2)) * 25;
+      audio.update(R4A, R4B, Math.sin(Math.PI * mt), motion, state.slice, 0.92 * Math.sin(t * 0.55), state.dual, sp);
+    }
+
+    drawFx();
+
+    // meters
+    fpsAcc += dt; fpsN++; fpsT += dt;
+    if (fpsT > 0.5) {
+      fpsEl.textContent = Math.round(fpsN / fpsAcc);
+      pcEl.textContent = (state.dualOn ? TOTAL : N).toLocaleString("de-DE");
+      fpsAcc = 0; fpsN = 0; fpsT = 0;
+    }
+    requestAnimationFrame(frame);
+  }
+
+  resize();
+  load(0, true);
+  requestAnimationFrame(t => { last = t; frame(t); });
+})();
+</script>
+
+</html>
