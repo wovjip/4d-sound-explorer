@@ -124,7 +124,7 @@
   body:not(.cockpit) .hud { display: none; }
   .mini {
     position: fixed; left: 16px; bottom: calc(env(safe-area-inset-bottom, 0px) + 12px); z-index: 5;
-    display: flex; align-items: center; gap: .9em; font: 500 max(11px, 2vh)/1 var(--mono); letter-spacing: .08em;
+    display: flex; flex-wrap: wrap; align-items: center; gap: .4em .9em; right: 16px; font: 500 max(11px, 2vh)/1 var(--mono); letter-spacing: .08em;
   }
   body.cockpit .hud { padding-bottom: calc(env(safe-area-inset-bottom, 0px) + max(11px, 2vh) + 30px); }
   .mini button {
