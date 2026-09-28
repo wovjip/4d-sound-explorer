@@ -123,7 +123,7 @@
 
   body:not(.cockpit) .hud { display: none; }
   .mini {
-    position: fixed; right: 16px; bottom: calc(env(safe-area-inset-bottom, 0px) + 12px); z-index: 5;
+    position: fixed; left: 16px; bottom: calc(env(safe-area-inset-bottom, 0px) + 12px); z-index: 5;
     display: flex; align-items: center; gap: .9em; font: 500 max(11px, 2vh)/1 var(--mono); letter-spacing: .08em;
   }
   body.cockpit .hud { padding-bottom: calc(env(safe-area-inset-bottom, 0px) + max(11px, 2vh) + 30px); }
@@ -133,6 +133,7 @@
   }
   .mini button[aria-pressed="true"] { opacity: 1; color: var(--a2); text-shadow: 0 0 12px rgba(77, 242, 255, .6); }
   .mini button:hover, .mini button:focus-visible { opacity: 1; color: var(--ink); }
+  .mini .sig { color: var(--dim); opacity: .4; font-size: .8em; letter-spacing: .06em; margin-left: .6em; user-select: text; }
   .mini .skip { font-size: 1.2em; font-weight: 500; letter-spacing: -.12em; padding-inline: .45em; opacity: .85; color: var(--ink); }
   .invite {
     position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 4; pointer-events: none;
@@ -173,6 +174,7 @@
   <button id="cockpit" aria-pressed="false" title="Taste C">cockpit off</button>
   <button class="skip" id="prev" aria-label="Voriger Körper">&lt;&lt;&lt;</button>
   <button class="skip" id="next" aria-label="Nächster Körper">&gt;&gt;&gt;</button>
+  <span class="sig">github.com/wovjip</span>
 </div>
 <div class="hud" id="hud">
   <header class="ident">
